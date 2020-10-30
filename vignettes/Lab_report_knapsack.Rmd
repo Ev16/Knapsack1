@@ -1,0 +1,261 @@
+---
+title: "Lab report knapsack"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Lab_report_knapsack}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+## 4.1 
+The package can be loaded to check whether it works properly or not.
+```{r setup}
+
+library(Knapsack1)
+
+```
+
+
+
+## 4.2 Brute force search
+The function first checks whether x is a data frame and if the weights and values are positive. Then a binary matrix (all_combinations_matrix) is created - as given by Karl Sigfrid, with all possible combinations of observations. 
+A for loop is then created to multiply the weights with each column in the binary matrix. Only the columns with column sums $\leq$ the constraint W is saved. Then a new matrix is created based on the binary matrix, but only with the "valid" columns that were saved in the previous step. Next a for loop is created to multiply each column in this new binary matrix with the values After this, each column sum is calculated and the column with the largest sum is saved. The index is also saved so that it can be used to extract the right combination of weights. These elements and the optimal value is returned in a list. More details on the function can be viewed in github: Knapsack1/R/Knapsack_FUNS or in section 4.4.
+\
+Creating some data and running the brute force function gives us:
+```{r}
+
+set.seed (42)
+n <- 2000
+knapsack_objects <- data.frame(w = sample (1: 4000, size = n, replace = TRUE),
+                               v = runif(n = n, 0, 10000))
+
+brute_force_knapsack(x = knapsack_objects[1:8, ], W = 3500)
+brute_force_knapsack(x = knapsack_objects[1:12, ], W = 3500)
+brute_force_knapsack(x = knapsack_objects[1:8, ], W = 2000)
+brute_force_knapsack(x = knapsack_objects[1:12, ], W = 2000)
+
+
+system.time(brute_force_knapsack(x = knapsack_objects[1:16, ], W = 2000))
+
+
+```
+The function does not take that long time to run, but this is only for 16 observations. It would be impossible to run the function for all 2000 observations 
+
+
+## 4.3 Greedy heuristic
+The steps taken to construct this algorithm is to first define a new column in the data frame called ratio. Then sort the data frame in descending order based on this new column. The cumulative sum of the weights is found in this new data frame and a cut-off value is also found based on the cumulative sum being $\leq$ W. Which elements to include is decided as going from 1 to the cut-off value.
+The data frame is also shortened so that it only goes from the first value in the index to the cut-off value in the index. Then the column of values is summarized and saved in a list together with the elements. This method might not be the prettiest one but it gets the job done without using a for/while loop. Although the function 'cumsum' is a type of loop. More details can be found on Github or in section 4.4.
+\
+Running the greedy_heuristic function based on some fabricated data gives us:
+```{r}
+set.seed (42)
+n <- 2000
+knapsack_objects <- data.frame(w = sample (1: 4000, size = n, replace = TRUE),
+                               v = runif(n = n, 0, 10000))
+
+greedy_knapsack(x = knapsack_objects[1:800,], W = 3500)
+greedy_knapsack (x = knapsack_objects [1: 1200,], W = 2000)
+
+
+set.seed (42)
+n <- 1e+6
+knapsack_objects <- data.frame(w = sample (1: 4000, size = n, replace = TRUE),
+                               v = runif(n = n, 0, 10000))
+
+system.time(greedy_knapsack(x = knapsack_objects, W = 2000))
+
+
+```
+As seen the greedy approximation function is much faster that the Brute force one. Even when changing the number of observations to 1 million, it still performs quite fast. It's not even possible to run the Brute force function with all the observations from my computer.
+
+
+## 4.4 Profiling
+```{r include=FALSE}
+library(profvis)
+```
+The profvis function is used below to identify possible bottlenecks. 16 observations (out of the dataframe) are used in the 'brute_force_knapsack' function and 1 million is used in the 'greedy_knapsack' function.
+```{r}
+
+set.seed (42)
+n <- 2000
+knapsack_objects <- data.frame(w = sample (1: 4000, size = n, replace = TRUE),
+                               v = runif(n = n, 0, 10000))
+
+profvis({
+  brute_force_knapsack <- function(x, W){
+  if (!is.data.frame(x))
+    stop("x is not a dataframe!")
+  weights = as.matrix(x[, 1])
+  values  = as.matrix(x[, 2])
+  if(any(weights <= 0 | values <= 0))
+    stop("input must be positive")
+  
+  n_items = nrow(x)
+  all_combinations = 0:(2^n_items - 1)
+  all_combinations_matrix = 
+    sapply(all_combinations, function(x){
+      result = intToBits(x)
+      result = as.numeric(result)
+      return(result[1:n_items])
+    })
+  
+  matrix1 = all_combinations_matrix
+  for (i in 1:ncol(matrix1)){
+    matrix1[,i] = weights * matrix1[,i]
+  }
+  sum_w = as.matrix(colSums(matrix1))
+  matrix_weights = as.matrix(which(sum_w < W))
+  matrix_weights_update = all_combinations_matrix[, c(matrix_weights)]
+  
+  matrix2 = all_combinations_matrix[, c(matrix_weights)]
+  for (i in 1:ncol(matrix2)){
+    matrix2[,i] = values * matrix2[,i]
+  }
+  sum_v = as.matrix(colSums(matrix2))
+  opt_value = which.max(sum_v)
+  value = sum_v[opt_value, ]
+  
+  opt_weights = as.matrix(matrix_weights_update[, opt_value])
+  #convert to row index:
+  elements = which(!opt_weights[,1] == 0) #row elements that doesn't start with 0
+  
+  list1 = list(value = value, elements = elements)
+  return(list1)
+}
+
+brute_force_knapsack(x = knapsack_objects[1:16, ], W = 2000)
+})
+
+
+set.seed (42)
+n <- 1e+6
+knapsack_objects <- data.frame(w = sample (1: 4000, size = n, replace = TRUE),
+                               v = runif(n = n, 0, 10000))
+
+
+
+profvis({
+  greedy_knapsack <- function(x, W){
+  x$ratio = x[, 2] / x[, 1]
+  x = x[order(x$ratio, decreasing = TRUE), ]
+  cum_sum = as.matrix(cumsum(x$w))
+  limit = tail(which(cum_sum <= W), 1)
+  elements = as.matrix(row.names(x))
+  elements = as.numeric(elements[c(1:limit),])
+  optimal_size = x[c(1:limit), ]
+  optimal_value = sum(optimal_size$v)
+  greedy_list = list(value = optimal_value,
+                     elements = elements)
+  return(greedy_list)
+}
+
+greedy_knapsack(x = knapsack_objects, W = 2000)
+})
+
+
+
+
+```
+As seen from this, the most time and memory consuming part in the 'brute_force_knapsack' function is the creation of all the possible combinations. This is a very big matrix and it's difficult to see how to get around using this code when creating this function. This chunk of code is written with sapply, and the apply family is written in C. The other part that takes relatively long time is the loop created to multiply the weights with each column in the binary (combination) matrix. Maybe this would move faster if sapply was used instead:
+```{r}
+set.seed (42)
+n <- 2000
+knapsack_objects <- data.frame(w = sample (1: 4000, size = n, replace = TRUE),
+                               v = runif(n = n, 0, 10000))
+profvis({
+  brute_force_knapsack <- function(x, W){
+  if (!is.data.frame(x))
+    stop("x is not a dataframe!")
+  weights = as.matrix(x[, 1])
+  values  = as.matrix(x[, 2])
+  if(any(weights <= 0 | values <= 0))
+    stop("input must be positive")
+  
+  n_items = nrow(x)
+  all_combinations = 0:(2^n_items - 1)
+  all_combinations_matrix = 
+    sapply(all_combinations, function(x){
+      result = intToBits(x)
+      result = as.numeric(result)
+      return(result[1:n_items])
+    })
+  
+  matrix1 = all_combinations_matrix
+  sapply(weights, function(x){
+    matrix1 = weights*matrix1[x]
+  })
+
+  sum_w = as.matrix(colSums(matrix1))
+  matrix_weights = as.matrix(which(sum_w < W))
+  matrix_weights_update = all_combinations_matrix[, c(matrix_weights)]
+  
+  matrix2 = all_combinations_matrix[, c(matrix_weights)]
+  for (i in 1:ncol(matrix2)){
+    matrix2[,i] = values * matrix2[,i]
+  }
+  sum_v = as.matrix(colSums(matrix2))
+  opt_value = which.max(sum_v)
+  value = sum_v[opt_value, ]
+  
+  opt_weights = as.matrix(matrix_weights_update[, opt_value])
+  #convert to row index:
+  elements = which(!opt_weights[,1] == 0) #row elements that doesn't start with 0
+  
+  list1 = list(value = value, elements = elements)
+  return(list1)
+}
+brute_force_knapsack(x = knapsack_objects[1:16, ], W = 3500)
+})
+
+
+```
+
+
+
+In the greedy knapsack function, what's taking a bit of time compared to the rest of the calls is to create a new column consisting of $\frac{v_i}{w_i}$ and then sorting the whole dataframe based on this value in descending order. But it's difficult to see how you could get around this since these steps are necessary. 
+The command that takes most of the time and alot of memory is turning the 'row.names' into a matrix and assigning it to 'elements'. Maybe improvements could be made by turning it in to a data frame instead of matrix:
+
+```{r}
+
+
+set.seed (42)
+n <- 1e+6
+knapsack_objects <- data.frame(w = sample (1: 4000, size = n, replace = TRUE),
+                               v = runif(n = n, 0, 10000))
+
+profvis({
+  greedy_knapsack <- function(x, W){
+  x$ratio = x[, 2] / x[, 1]
+  x = x[order(x$ratio, decreasing = TRUE), ]
+  cum_sum = as.matrix(cumsum(x$w))
+  limit = tail(which(cum_sum <= W), 1)
+  elements = data.frame(row.names(x))
+  elements = as.numeric(elements[c(1:limit),])
+  optimal_size = x[c(1:limit), ]
+  optimal_value = sum(optimal_size$v)
+  greedy_list = list(value = optimal_value,
+                     elements = elements)
+  return(greedy_list)
+}
+greedy_knapsack(x = knapsack_objects, W = 3500)
+
+})
+
+
+
+
+```
+As seen both functions were improved by changing some commands. 
+
+
+## 4.5 Document package
+See Github
+
+

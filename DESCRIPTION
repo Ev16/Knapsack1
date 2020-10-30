@@ -1,0 +1,16 @@
+Package: Knapsack1
+Type: Package
+Title: Knapsack algorithm
+Version: 0.1.0
+Author: Mona S.
+Maintainer: Mona S. <mona-amini@hotmail.com>
+Description: Implements an algorithm to solve the 0-1 knapsack problem
+    The package also implements the greedy approximation algorithm.
+License: GPL-3
+Encoding: UTF-8
+LazyData: true
+RoxygenNote: 7.1.1
+Suggests: 
+    knitr,
+    rmarkdown
+VignetteBuilder: knitr
